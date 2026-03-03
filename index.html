@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>micro:bit → Web Serial</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 1rem;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      min-height: 100vh;
+    }
+     
+    pre {
+      background: #111;
+      color: #0f0;
+      padding: 1rem;
+      min-height: 200px;
+      border-radius: 5px;
+    }
+
+    button {
+      padding: 0.6rem 1rem;
+      background-color: white;
+      border-width: 1px;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>micro:bit → Local HTML</h1>
+  <button id="connect">Connect micro:bit</button>
+  <pre id="log"></pre>
+  <script>
+    const logEl = document.getElementById('log');
+    const connectBtn = document.getElementById('connect');
+
+    function log(line) {
+      logEl.textContent += line + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function connectSerial() {
+      try {
+        // Ask user to select the micro:bit USB serial device
+        const port = await navigator.serial.requestPort({
+          filters: [{ usbVendorId: 0x0D28 }] // ARM/Micro:bit vendor (optional)
+        });
+        await port.open({ baudRate: 115200 });
+
+        const decoder = new TextDecoderStream();
+        const inputDone = port.readable.pipeTo(decoder.writable);
+        const inputStream = decoder.readable;
+
+        const reader = inputStream.getReader();
+        let buffer = '';
+
+        log('Connected. Reading lines…');
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += value;
+          let lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            log(line.trim());
+            // TODO: parse CSV/JSON if needed
+          }
+        }
+
+        reader.releaseLock();
+        await inputDone;
+        await port.close();
+      } catch (err) {
+        console.error(err);
+        log('Error: ' + err.message);
+      }
+    }
+
+    if (!('serial' in navigator)) {
+      log('Web Serial not supported in this browser. Use Chrome/Edge desktop.');
+    }
+
+    connectBtn.addEventListener('click', connectSerial);
+  </script>
+</body>
+</html>
